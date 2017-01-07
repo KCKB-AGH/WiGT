@@ -35,6 +35,35 @@ Camera camera;
 double time;
 double timeSpeed;
 
+//stereoskopia
+float parallaxe = 0;
+float separation = 0.1;
+
+void StereoProjection(float _left, float _right, float _bottom, float _top, float _near, float _far, float _zero_plane, float _dist, float _eye)
+{
+	float   _dx = _right - _left;
+	float   _dy = _top - _bottom;
+
+	float   _xmid = (_right + _left) / 2.0;
+	float   _ymid = (_top + _bottom) / 2.0;
+
+	float   _clip_near = _dist + _zero_plane - _near;
+	float   _clip_far = _dist + _zero_plane - _far;
+
+	float  _n_over_d = _clip_near / _dist;
+
+	float   _topw = _n_over_d * _dy / 2.0;
+	float   _bottomw = -_topw;
+	float   _rightw = _n_over_d * (_dx / 2.0 - _eye);
+	float   _leftw = _n_over_d *(-_dx / 2.0 - _eye);
+
+	// Create a fustrum, and shift it off axis
+	// glTranslate() applies to PROJECTION matrix
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glFrustum(_leftw, _rightw, _bottomw, _topw, _clip_near, _clip_far);
+	glTranslatef(-_xmid - _eye, -_ymid, -_zero_plane - _dist);
+}
 //przechowuje stan sterownikow kamery -> 
 //jezeli prawda -> wartosc danej kontrolki oznacza ze jest wcisnieta
 struct ControlStates
@@ -153,6 +182,10 @@ void drawCube(void);
 void display(void)
 {
 	// aktualizacja logiki i symulacji
+	//stereoskopia lewe oko
+	glDrawBuffer(GL_BACK_LEFT);
+	StereoProjection(-6, 6, -4.8, 4.8, 12, -100, parallaxe, 13, -separation);
+	glColorMask(true, false, false, false);
 	time += timeSpeed;
 	solarSystem.calculatePositions(time);
 
@@ -167,12 +200,13 @@ void display(void)
 	glColor3f(1.0, 1.0, 1.0);
 
 	//ustawienie macierzy perspektywy dla renderingu
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	gluPerspective(70.0f, (float)screenWidth / (float)screenHeight, 0.001f, 500.0f);
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	//glMatrixMode(GL_PROJECTION);
+	//glLoadIdentity();
+	//gluPerspective(70.0f, (float)screenWidth / (float)screenHeight, 0.001f, 500.0f);
+	//glMatrixMode(GL_MODELVIEW);
+	//glLoadIdentity();
 
+	
 
 	// wykonanie przekształcenia macierzy OpenGL na macierze orientacji
 	camera.transformOrientation();
@@ -221,6 +255,83 @@ void display(void)
 		glEnd();
 	}
 
+	//stereoskopia prawe oko
+	glDrawBuffer(GL_BACK_RIGHT);
+	glClear(GL_DEPTH_BUFFER_BIT);
+	StereoProjection(-6, 6, -4.8, 4.8, 12, -100, parallaxe, 13, separation);
+	glColorMask(false, true, true, false);
+
+	time += timeSpeed;
+	solarSystem.calculatePositions(time);
+
+	if (controls.forward) camera.forward();		if (controls.backward) camera.backward();
+	if (controls.left) camera.left();			if (controls.right) camera.right();
+	if (controls.yawLeft) camera.yawLeft();		if (controls.yawRight) camera.yawRight();
+	if (controls.rollLeft) camera.rollLeft();	if (controls.rollRight) camera.rollRight();
+	if (controls.pitchUp) camera.pitchUp();		if (controls.pitchDown) camera.pitchDown();
+
+	//czyszczenie buforow
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glColor3f(1.0, 1.0, 1.0);
+
+	//ustawienie macierzy perspektywy dla renderingu
+	//glMatrixMode(GL_PROJECTION);
+	//glLoadIdentity();
+	//gluPerspective(70.0f, (float)screenWidth / (float)screenHeight, 0.001f, 500.0f);
+	//glMatrixMode(GL_MODELVIEW);
+	//glLoadIdentity();
+
+
+
+	// wykonanie przekształcenia macierzy OpenGL na macierze orientacji
+	camera.transformOrientation();
+
+	// rysowanie skyboxa
+	glBindTexture(GL_TEXTURE_2D, stars->getTextureHandle());
+	drawCube();
+
+	// wykonanie przekształcenia macierzy OpenGL na macierze translacji
+	camera.transformTranslation();
+
+
+
+	//GLfloat lightPosition[] = { 0.0, 0.0, 0.0, 1.0 };
+	glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);
+
+	//rendering ukladu slonecznego
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_LIGHTING);
+
+	solarSystem.render();
+	glDisable(GL_LIGHTING);
+
+	// rendering orbit
+	if (showOrbits)
+		solarSystem.renderOrbits();
+
+	glDisable(GL_DEPTH_TEST);
+
+	// skonfigurowanie macierzy do wyswietlania interfejsu uzytkownika (okna pomocy)
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluOrtho2D(0.0, (GLdouble)screenWidth, (GLdouble)screenHeight, 0.0);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+	//rysowanie okna pomocy
+	if (helpDialogue)
+	{
+		glBindTexture(GL_TEXTURE_2D, help->getTextureHandle());
+		glBegin(GL_QUADS);
+		glTexCoord2f(0.0f, 0.0f);	glVertex2f(0.0f, 0.0f);
+		glTexCoord2f(1.0f, 0.0f);	glVertex2f(512.0f, 0.0f);
+		glTexCoord2f(1.0f, 1.0f);	glVertex2f(512.0f, 512.0f);
+		glTexCoord2f(0.0f, 1.0f);	glVertex2f(0.0f, 512.0f);
+		glEnd();
+	}
+
+	glColorMask(true, true, true, true);
+
 	glFlush();
 	glutSwapBuffers();
 }
@@ -268,6 +379,18 @@ void keyDown(unsigned char key, int x, int y)
 		break;
 	case '.':
 		camera.speedUp(); // przyspieszenie kamery
+		break;
+	case 'z':
+		parallaxe += 0.1; //zwiekszenie paralaksy
+		break;
+	case 'x':
+		parallaxe -= 0.1; //zmniejszenie paralaksy
+		break;
+	case 'c':
+		separation += 0.1; //zwiekszenie separacji
+		break;
+	case 'v':
+		separation -= 0.1; //zmniejszenie separacji
 		break;
 		//ponizej obsluga kamery
 	case 'w':
